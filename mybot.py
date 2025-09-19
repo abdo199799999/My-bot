@@ -1,11 +1,11 @@
-# mybot.py - الإصدار النهائي (مع إصلاح معالج الرسائل)
+# mybot.py - الإصدار النهائي (مع إصلاح scan_command)
 import logging
 import asyncio
 import json
 import os
 import socket
 import httpx
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from telegram.error import BadRequest
 from functools import wraps
@@ -28,6 +28,65 @@ def load_language(lang_code):
     except FileNotFoundError:
         with open('en.json', 'r', encoding='utf-8') as f:
             return json.load(f)
+
+# --- دوال البحث غير المتزامنة ---
+async def get_subdomains_from_crtsh(client, domain):
+    # ... (الكود هنا لم يتغير)
+    logger.info(f"[*] Fetching subdomains from crt.sh for: {domain}")
+    subdomains = set()
+    try:
+        response = await client.get(f'https://crt.sh/?q=%.{domain}&output=json')
+        if response.status_code == 200:
+            data = response.json()
+            for entry in data:
+                subdomains.add(entry['name_value'])
+            logger.info(f"[+] Found {len(subdomains)} unique subdomains via crt.sh.")
+            return subdomains
+    except Exception as e:
+        logger.error(f"[-] An error occurred with crt.sh: {e}")
+    return subdomains
+
+async def get_subdomains_from_otx(client, domain):
+    # ... (الكود هنا لم يتغير)
+    logger.info(f"[*] Fetching subdomains from AlienVault OTX for: {domain}")
+    subdomains = set()
+    try:
+        response = await client.get(f'https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns')
+        if response.status_code == 200:
+            data = response.json()
+            for record in data.get('passive_dns', []):
+                subdomains.add(record['hostname'])
+            logger.info(f"[+] Found {len(subdomains)} unique subdomains via OTX.")
+            return subdomains
+    except Exception as e:
+        logger.error(f"[-] An error occurred with OTX: {e}")
+    return subdomains
+
+async def get_ip_info(client, ip):
+    # ... (الكود هنا لم يتغير)
+    try:
+        response = await client.get(f'https://ipinfo.io/{ip}/json')
+        return response.json()
+    except Exception:
+        return {}
+
+async def get_server_header(client, domain):
+    # ... (الكود هنا لم يتغير)
+    try:
+        response = await client.head(f'https://{domain}', follow_redirects=True)
+        return response.headers.get('server', 'N/A')
+    except Exception:
+        return 'N/A'
+
+async def check_port(ip, port):
+    # ... (الكود هنا لم يتغير)
+    try:
+        _, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=2.0)
+        writer.close()
+        await writer.wait_closed()
+        return port, True
+    except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+        return port, False
 
 # --- دالة التحقق من الاشتراك ---
 async def is_user_member(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
@@ -84,6 +143,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         await update.message.reply_text(t["welcome"], reply_markup=reply_markup)
 
+# --- هذا هو الجزء الذي تم إصلاحه ---
 @force_subscribe
 async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang_code = context.user_data.get('lang', 'en')
@@ -94,10 +154,12 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
         
     domain_to_scan = context.args[0]
+    
+    # دائماً نرسل رسالة جديدة ونحفظها في متغير "msg"
     msg = await update.message.reply_text(t["scan_start"].format(domain=domain_to_scan))
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             tasks = [get_subdomains_from_crtsh(client, domain_to_scan), get_subdomains_from_otx(client, domain_to_scan)]
             results = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -108,14 +170,17 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         if all_subdomains:
             results_text = "\n".join(sorted(list(all_subdomains)))
+            # حذف رسالة "جاري البحث..."
+            await msg.delete()
+            
             if len(results_text.encode('utf-8')) > 4000:
                 with open("subdomains.txt", "w", encoding="utf-8") as f:
                     f.write(results_text)
                 await context.bot.send_document(chat_id=update.effective_chat.id, document=open("subdomains.txt", "rb"), caption=t["scan_results_file"].format(count=len(all_subdomains)))
                 os.remove("subdomains.txt")
-                await msg.delete()
             else:
-                await msg.edit_text(t["scan_results_text"].format(count=len(all_subdomains), domains=results_text))
+                # إرسال النتائج كرسالة جديدة
+                await update.message.reply_text(t["scan_results_text"].format(count=len(all_subdomains), domains=results_text))
         else:
             await msg.edit_text(t["scan_no_results"])
             
@@ -243,22 +308,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.edit_message_text(text=prompt_text)
             context.user_data['next_action'] = query.data.replace('_tool', '')
 
-# --- هذا هو الجزء الذي تم إصلاحه ---
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """يعالج الرسائل النصية بعد الضغط على زر"""
     next_action = context.user_data.get('next_action')
-    
     if next_action and update.message and update.message.text:
-        # امسح الإجراء التالي لمنع التكرار
-        del context.user_data['next_action']
-        
-        # قم بإنشاء أمر وهمي
-        command_to_run = f"/{next_action}"
-        
-        # أضف النص الذي أرسله المستخدم كوسيطة للأمر
         context.args = update.message.text.split()
         
-        # استدعاء الدالة المناسبة مباشرة
         command_map = {
             'scan': scan_command,
             'ip': ip_command,
@@ -267,15 +321,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         }
         
         if next_action in command_map:
+            # امسح الإجراء التالي لمنع التكرار
+            del context.user_data['next_action']
             await command_map[next_action](update, context)
         
     else:
-        # إذا لم يكن هناك إجراء، أعده إلى البداية
         await start_command(update, context)
 
 # --- الدالة الرئيسية ---
 def main() -> None:
-    """تشغيل البوت"""
     if not BOT_TOKEN:
         logger.error("FATAL ERROR: BOT_TOKEN not found.")
         return
@@ -291,7 +345,6 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
     logger.info("Bot is running...")
-    
     application.run_polling()
 
 if __name__ == "__main__":
