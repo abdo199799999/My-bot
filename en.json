@@ -25,6 +25,8 @@
     "ports_results": "Open ports for IP `{ip}` are: {ports}",
     "ports_no_results": "No common open ports found for IP: {ip}",
     "ports_usage": "Usage: /ports <ip or domain>",
-    "generic_error": "An unexpected error occurred. Please try again."
+    "generic_error": "An unexpected error occurred. Please try again.",
+    "force_subscribe_message": "Sorry, you must join the group first to use the bot. Please subscribe and then try again by pressing /start.",
+    "join_channel_button": "Join Group"
 }
 
