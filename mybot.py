@@ -1,4 +1,4 @@
-# mybot.py - الإصدار العالمي النهائي
+# mybot.py - الإصدار العالمي النهائي (مع إصلاح حالة /start)
 import logging
 import asyncio
 import json
@@ -13,7 +13,6 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # اقرأ التوكن من متغيرات البيئة (للنشر الآمن)
-# تأكد من أنك ستقوم بإعداد هذا في Koyeb
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 # --- إدارة اللغات ---
@@ -23,7 +22,6 @@ def load_language(lang_code):
         with open(f'{lang_code}.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        # إذا لم يتم العثور على ملف اللغة، استخدم الإنجليزية كخيار افتراضي
         with open('en.json', 'r', encoding='utf-8') as f:
             return json.load(f)
 
@@ -32,7 +30,6 @@ def load_language(lang_code):
 async def get_server_header(client, domain):
     """الحصول على ترويسة الخادم بشكل غير متزامن"""
     try:
-        # استخدام HEAD لطلب أسرع
         response = await client.head(f"https://{domain}", timeout=10, follow_redirects=True)
         return response.headers.get('server', 'N/A')
     except Exception:
@@ -42,7 +39,7 @@ async def get_ip_info(client, ip):
     """الحصول على معلومات IP من ipinfo.io بشكل غير متزامن"""
     try:
         response = await client.get(f"https://ipinfo.io/{ip}/json", timeout=10)
-        response.raise_for_status() # التأكد من أن الطلب ناجح
+        response.raise_for_status()
         return response.json()
     except Exception:
         return {}
@@ -57,7 +54,6 @@ async def get_subdomains_from_crtsh(client, domain):
             for entry in data:
                 name_value = entry.get('name_value', '')
                 if name_value:
-                    # تنظيف وإضافة النطاقات الفريدة فقط
                     subdomains.update(name.strip() for name in name_value.split('\n') if name.strip().endswith(f".{domain}"))
     except Exception as e:
         logger.error(f"Error with crt.sh: {e}")
@@ -81,18 +77,22 @@ async def get_subdomains_from_otx(client, domain):
 async def check_port(ip, port):
     """فحص منفذ معين بشكل غير متزامن"""
     try:
-        # محاولة فتح اتصال بالمنفذ
         _, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=2)
         writer.close()
         await writer.wait_closed()
-        return port, True # المنفذ مفتوح
+        return port, True
     except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
-        return port, False # المنفذ مغلق أو لا يمكن الوصول إليه
+        return port, False
 
 # --- أوامر البوت ---
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """يعرض رسالة الترحيب مع الأزرار"""
+    # --- الإصلاح: إعادة تعيين الحالة عند استدعاء /start ---
+    if 'next_action' in context.user_data:
+        del context.user_data['next_action']
+    # ----------------------------------------------------
+
     lang_code = context.user_data.get('lang', 'en')
     t = load_language(lang_code)
     
@@ -105,7 +105,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # إذا كان الأمر /start جديدًا، أرسل رسالة جديدة. إذا كان تعديلاً، قم بتعديل الرسالة الحالية.
     if update.callback_query:
         await update.callback_query.edit_message_text(t["welcome"], reply_markup=reply_markup)
     else:
@@ -136,13 +135,12 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         if all_subdomains:
             results_text = "\n".join(sorted(list(all_subdomains)))
-            # إذا كانت النتائج طويلة جدًا، أرسلها كملف
             if len(results_text.encode('utf-8')) > 4000:
                 with open("subdomains.txt", "w", encoding="utf-8") as f:
                     f.write(results_text)
                 await context.bot.send_document(chat_id=update.effective_chat.id, document=open("subdomains.txt", "rb"), caption=t["scan_results_file"].format(count=len(all_subdomains)))
                 os.remove("subdomains.txt")
-                await msg.delete() # حذف رسالة "جاري البحث..."
+                await msg.delete()
             else:
                 await msg.edit_text(t["scan_results_text"].format(count=len(all_subdomains), domains=results_text))
         else:
@@ -259,7 +257,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data['lang'] = new_lang
         t = load_language(new_lang)
         await query.edit_message_text(text=t["language_changed"])
-        await start_command(update, context) # إعادة عرض القائمة الرئيسية باللغة الجديدة
+        await start_command(update, context)
 
     else:
         tool_prompts = {
@@ -289,7 +287,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if next_action in command_map:
             await command_map[next_action](update, context)
         
-        del context.user_data['next_action']
+        if 'next_action' in context.user_data:
+            del context.user_data['next_action']
     else:
         await start_command(update, context)
 
