@@ -1,4 +1,4 @@
-# mybot.py - الإصدار العالمي (مع الاشتراك الإجباري لمجموعة fastNetAbdo)
+# mybot.py - الإصدار النهائي (مع إصلاح الاستمرارية على Koyeb)
 import logging
 import asyncio
 import json
@@ -8,16 +8,16 @@ import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from telegram.error import BadRequest
+from functools import wraps
 
 # --- الإعدادات الأساسية ---
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- إعدادات الاشتراك الإجباري (تم التحديث) ---
+# --- إعدادات الاشتراك الإجباري ---
 FORCE_SUB_CHANNEL_ID = -1002000171927
 FORCE_SUB_CHANNEL_LINK = "https://t.me/fastNetAbdo"
 
-# اقرأ توكن البوت من متغيرات البيئة
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 # --- إدارة اللغات ---
@@ -31,22 +31,19 @@ def load_language(lang_code):
 
 # --- دالة التحقق من الاشتراك ---
 async def is_user_member(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
-    """التحقق مما إذا كان المستخدم عضوًا في القناة"""
     try:
         member = await context.bot.get_chat_member(chat_id=FORCE_SUB_CHANNEL_ID, user_id=user_id)
-        if member.status in ['member', 'administrator', 'creator']:
-            return True
-        else:
-            return False
+        return member.status in ['member', 'administrator', 'creator']
     except BadRequest:
         logger.error("خطأ في التحقق من عضوية المستخدم. تأكد من أن البوت مشرف في القناة وأن المعرّف صحيح.")
-        return True # اسمح للمستخدم بالمرور في حالة حدوث خطأ لمنع توقف البوت
+        return True
     except Exception as e:
         logger.error(f"خطأ غير متوقع في is_user_member: {e}")
         return True
 
-# --- الديكور (Decorator) للتحقق من الاشتراك (الطريقة الاحترافية) ---
+# --- الديكور (Decorator) للتحقق من الاشتراك ---
 def force_subscribe(func):
+    @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         lang_code = context.user_data.get('lang', 'en')
@@ -56,17 +53,14 @@ def force_subscribe(func):
             keyboard = [[InlineKeyboardButton(t["join_channel_button"], url=FORCE_SUB_CHANNEL_LINK)]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            # تحديد مكان إرسال الرسالة (رسالة جديدة أو تعديل)
-            if update.callback_query:
-                await update.callback_query.message.reply_text(t["force_subscribe_message"], reply_markup=reply_markup)
-            else:
-                await update.message.reply_text(t["force_subscribe_message"], reply_markup=reply_markup)
+            message_sender = update.callback_query.message if update.callback_query else update.message
+            await message_sender.reply_text(t["force_subscribe_message"], reply_markup=reply_markup)
             return
         
         return await func(update, context, *args, **kwargs)
     return wrapper
 
-# --- أوامر البوت (معدلة باستخدام الديكور) ---
+# --- أوامر البوت ---
 
 @force_subscribe
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -92,7 +86,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 @force_subscribe
 async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (الكود الأصلي للدالة بدون تغيير) ...
     lang_code = context.user_data.get('lang', 'en')
     t = load_language(lang_code)
     
@@ -132,7 +125,6 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 @force_subscribe
 async def ip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (الكود الأصلي للدالة بدون تغيير) ...
     lang_code = context.user_data.get('lang', 'en')
     t = load_language(lang_code)
     
@@ -149,7 +141,6 @@ async def ip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 @force_subscribe
 async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (الكود الأصلي للدالة بدون تغيير) ...
     lang_code = context.user_data.get('lang', 'en')
     t = load_language(lang_code)
 
@@ -188,7 +179,6 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 @force_subscribe
 async def ports_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (الكود الأصلي للدالة بدون تغيير) ...
     lang_code = context.user_data.get('lang', 'en')
     t = load_language(lang_code)
 
@@ -221,7 +211,6 @@ async def ports_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 # --- معالجات الأزرار والرسائل ---
 @force_subscribe
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (الكود الأصلي للدالة بدون تغيير) ...
     query = update.callback_query
     await query.answer()
     lang_code = context.user_data.get('lang', 'en')
@@ -256,7 +245,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @force_subscribe
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (الكود الأصلي للدالة بدون تغيير) ...
     next_action = context.user_data.get('next_action')
     if next_action and update.message:
         context.args = update.message.text.split()
@@ -269,15 +257,35 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         }
         
         if next_action in command_map:
-            # استدعاء الدالة مباشرة دون الديكور مرة أخرى
-            await command_map[next_action].__wrapped__(update, context)
+            await command_map[next_action](update, context)
         
         if 'next_action' in context.user_data:
             del context.user_data['next_action']
     else:
-        await start_command.__wrapped__(update, context)
+        await start_command(update, context)
 
-# --- (بقية الكود كما هو) ---
-# ... (دوال الأدوات المساعدة مثل get_server_header) ...
-# ... (الدالة الرئيسية main) ...
+# --- الدالة الرئيسية ---
+def main() -> None:
+    """تشغيل البوت"""
+    if not BOT_TOKEN:
+        logger.error("FATAL ERROR: BOT_TOKEN not found.")
+        return
+
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("scan", scan_command))
+    application.add_handler(CommandHandler("ip", ip_command))
+    application.add_handler(CommandHandler("info", info_command))
+    application.add_handler(CommandHandler("ports", ports_command))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+    logger.info("Bot is running...")
+    
+    # --- التغيير النهائي لضمان الاستمرارية ---
+    application.run_until_disconnected()
+
+if __name__ == "__main__":
+    main()
 
