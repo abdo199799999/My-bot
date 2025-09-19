@@ -1,4 +1,4 @@
-# mybot.py - الإصدار النهائي (مع إصلاح الاستمرارية على Koyeb)
+# mybot.py - الإصدار النهائي (للعمل مع إصدار مكتبة محدد)
 import logging
 import asyncio
 import json
@@ -283,8 +283,8 @@ def main() -> None:
 
     logger.info("Bot is running...")
     
-    # --- التغيير النهائي لضمان الاستمرارية ---
-    application.run_until_disconnected()
+    # --- العودة إلى run_polling() التي تعمل مع الإصدار المحدد ---
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
