@@ -1,11 +1,11 @@
-# mybot.py - الإصدار النهائي (للعمل مع إصدار مكتبة محدد)
+# mybot.py - الإصدار النهائي (مع إصلاح معالج الرسائل)
 import logging
 import asyncio
 import json
 import os
 import socket
 import httpx
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from telegram.error import BadRequest
 from functools import wraps
@@ -243,12 +243,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.edit_message_text(text=prompt_text)
             context.user_data['next_action'] = query.data.replace('_tool', '')
 
-@force_subscribe
+# --- هذا هو الجزء الذي تم إصلاحه ---
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """يعالج الرسائل النصية بعد الضغط على زر"""
     next_action = context.user_data.get('next_action')
-    if next_action and update.message:
+    
+    if next_action and update.message and update.message.text:
+        # امسح الإجراء التالي لمنع التكرار
+        del context.user_data['next_action']
+        
+        # قم بإنشاء أمر وهمي
+        command_to_run = f"/{next_action}"
+        
+        # أضف النص الذي أرسله المستخدم كوسيطة للأمر
         context.args = update.message.text.split()
         
+        # استدعاء الدالة المناسبة مباشرة
         command_map = {
             'scan': scan_command,
             'ip': ip_command,
@@ -259,9 +269,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if next_action in command_map:
             await command_map[next_action](update, context)
         
-        if 'next_action' in context.user_data:
-            del context.user_data['next_action']
     else:
+        # إذا لم يكن هناك إجراء، أعده إلى البداية
         await start_command(update, context)
 
 # --- الدالة الرئيسية ---
@@ -283,7 +292,6 @@ def main() -> None:
 
     logger.info("Bot is running...")
     
-    # --- العودة إلى run_polling() التي تعمل مع الإصدار المحدد ---
     application.run_polling()
 
 if __name__ == "__main__":
