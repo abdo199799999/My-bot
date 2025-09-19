@@ -2,7 +2,7 @@
     "welcome": "Welcome to the Global Recon Bot! Choose a tool to get started:",
     "select_language": "Select your language:",
     "language_changed": "Language changed successfully.",
-    "scan_button": "🔎 Scan Subdomains",
+    "scan_button": "🔎 Search Subdomains",
     "ip_button": "🌐 Get IP",
     "info_button": "ℹ️ Advanced Info",
     "ports_button": "🚪 Scan Ports",
