@@ -6,7 +6,7 @@
     "ip_button": "🌐 Get IP",
     "info_button": "ℹ️ Advanced Info",
     "ports_button": "🚪 Scan Ports",
-    "scan_prompt": "Now, send the domain you want to scan (e.g., google.com)",
+    "scan_prompt": "Now, send the main domain to search for its subdomains (e.g., google.com)",
     "ip_prompt": "Now, send the domain to get its IP address.",
     "info_prompt": "Now, send the IP or domain to get info about it.",
     "ports_prompt": "Now, send the IP or domain to scan its common ports.",
