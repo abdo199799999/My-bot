@@ -15,8 +15,8 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # --- إعدادات الاشتراك الإجباري ---
-FORCE_SUB_CHANNEL_ID = -1002000171927
-FORCE_SUB_CHANNEL_LINK = "https://t.me/fastNetAbdo"
+FORCE_SUB_CHANNEL_ID = -1003046280171
+FORCE_SUB_CHANNEL_LINK = "https://t.me/TheCyberArsenal"
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
@@ -349,4 +349,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
